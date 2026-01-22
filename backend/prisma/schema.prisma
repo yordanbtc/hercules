@@ -1,0 +1,157 @@
+// RESUMEN DE LÓGICA: Define la estructura de tablas y relaciones en PostgreSQL.
+// FLUJO DE ARCHIVOS: La CLI de Prisma lee este archivo para generar el Prisma Client.
+// ORDEN DE EJECUCIÓN: Se procesa al ejecutar 'npx prisma generate' o 'prisma migrate dev'.
+// IMPACTO: Establece las reglas de negocio, tipos de datos y restricciones de la base de datos.
+// RESPONSABILIDAD: Actuar como la "fuente única de verdad" para el esquema de datos del backend.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  telephone String?
+  firstName String
+  lastName  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  password  String
+
+  memberships OrganizationMembership[]
+  type        UserType                 @default(USER)
+
+  invoices Invoice[]
+  orders   Order[]
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  memberships OrganizationMembership[]
+}
+
+model OrganizationMembership {
+  id             String                 @id @default(uuid())
+  organizationId String
+  userId         String
+  createdAt      DateTime               @default(now())
+  role           OrganizationMemberRole @default(MEMBER)
+
+  // onDelete: Cascade asegura que si se borra el usuario, se limpia su membresía.
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String?
+  description String?  @db.VarChar(255)
+  price       Decimal?
+  stock       Int      @default(0)
+  createdAt   DateTime @default(now()) @db.Timestamp()
+  
+  categoryId  String?   @map("CategoryId")
+  category    Category? @relation(fields: [categoryId], references: [id])
+  
+  orderItems  OrderItem[]
+}
+
+model Category {
+  id       String    @id @default(uuid())
+  name     String    @db.VarChar(30)
+  products Product[]
+}
+
+model Invoice {
+  id        String        @id @default(uuid())
+  number    String        @unique 
+  status    InvoiceStatus @default(PENDING)
+  
+  // DATOS FINANCIEROS CLAVE:
+  subTotal  Decimal       @db.Decimal(10, 2) // Precio base de la venta.
+  tax       Decimal       @db.Decimal(10, 2) // Impuestos (IVA/TAX) aplicados.
+  total     Decimal       @db.Decimal(10, 2) // Monto total (subTotal + tax).
+  
+  userId    String        @map("userId")
+  orderId   String        @unique
+  
+  createdAt DateTime      @default(now()) @db.Timestamp()
+  dueDate   DateTime?     
+  paidAt    DateTime?     
+
+  user    User    @relation(fields: [userId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id])
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  orderNumber Int         @default(autoincrement())
+  status    OrderStatus @default(PROCESSING)
+  total       Decimal     @db.Decimal(10, 2)
+  customerId  String
+  userId      String      @map("UserId")
+  createdAt   DateTime    @db.Timestamp()
+
+  customer   Customer    @relation(fields: [customerId], references: [id])
+  user       User        @relation(fields: [userId], references: [id])
+  orderItems OrderItem[]
+  invoice    Invoice?
+
+  @@map("Order")
+}
+
+model OrderItem {
+  id        String @id @default(uuid())
+  quantity  Int
+  productId String @map("ProductId")
+  orderId   String @map("OrderId")
+
+  order   Order   @relation(fields: [orderId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String   @db.VarChar(100)
+  phone     String   @db.VarChar(100)
+  address   String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @db.Timestamp()
+  orders    Order[]
+
+  @@map("Customer")
+}
+
+// ENUMERACIONES: Definen valores fijos para evitar errores de escritura.
+enum OrganizationMemberRole {
+  MANAGER
+  MEMBER
+}
+
+enum UserType {
+  USER
+  ADMIN
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  CANCELLED
+  VOID
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
