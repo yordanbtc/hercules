@@ -1,2 +1,2 @@
 # Auto detect text files and perform LF normalization
-*.ts linguist-detectable=true
+backend/** linguist-detectable=true
